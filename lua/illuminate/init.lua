@@ -1,7 +1,102 @@
 local M = {}
 
 function M.setup()
+    vim.cmd("highlight g0t4Illuminate gui=underline")
 
+    local ns_id = vim.api.nvim_create_namespace("g0t4_illuminate")
+
+    local function get_word_bounds(line, cursor_col)
+        -- TODO some issues with pattern and -=_ and others...
+        -- TODO also vet pattern vs above's ()
+        -- %W == not %w ==> not alphanumeric chars
+        local start_index, end_index = line:find("%w+", cursor_col)
+        local before_cursor = line:sub(1, cursor_col)
+        local rev_start_idx, rev_end_idx = before_cursor:reverse():find("%w+")
+        -- FYI shouldn't need start_idx b/c it s/b 1 always (always in a word, right?)
+        -- what if I am on an = sign... currently underlines: "before = after" 
+        -- todo failure logic
+        if rev_end_idx == nil then
+            rev_end_idx = before_cursor:len()
+        end
+        local word_start_idx = cursor_col - rev_end_idx
+        print(before_cursor, " - ", start_index, end_index, " - ", rev_start_idx, rev_end_idx, " - ", word_start_idx)
+        if start_index and end_index then
+            -- SUPER CRAPPY so far... only works for success case
+            return word_start_idx, end_index
+        else
+            -- TODO error handling not working
+            -- Check if the cursor is inside a word and find backwards
+            local word_before = line:sub(1, cursor_col):match(".*()%w+$")
+            if word_before then
+                start_index = word_before
+                end_index = line:find("%W", start_index) or #line
+                return start_index, end_index
+            end
+        end
+        return nil, nil -- No word found
+    end
+
+    vim.cmd("autocmd CursorMoved * lua IlluminateCurrentWord()")
+    function IlluminateCurrentWord()
+        if vim.bo.filetype == "TelescopePrompt" then
+            return
+        end
+        -- FYI I REALLY ONLY GOT HAPPY PATH WORKING TO HIGHLIGHT WORD UNDER CURSOR
+        local current_buffer = 0
+        local cursor_pos = vim.api.nvim_win_get_cursor(current_buffer)
+        -- wow, frustrating... cursor_pos has row/line (1 based), column (0 based)
+        print(vim.inspect(cursor_pos))
+        local show_text = "" .. vim.inspect(cursor_pos)
+        local line_0based = cursor_pos[1] - 1
+        local col_0based = cursor_pos[2]
+        local current_line_text = vim.api.nvim_get_current_line()
+        -- local start_idx, end_idx = current_line_text:find("%S+", col_0based + 1)
+        local start_idx, end_idx = get_word_bounds(current_line_text, col_0based + 1)
+
+        if not start_idx then
+            print("not implemented")
+            -- start_idx, end_idx = line:find("[%w_]+", col + 1
+            return
+        end
+        local word = current_line_text:sub(start_idx, end_idx)
+        print("word: ", word)
+        local search_pattern = word
+
+        vim.api.nvim_buf_clear_namespace(current_buffer, ns_id, 0, -1)
+
+        local positions = {}                                  -- Store positions of matches
+        local start_line = 0                                  -- TODO ONLY VISIBLE LINES
+        local bufnr = bufnr or vim.api.nvim_get_current_buf() -- TODO pass buffer from event?
+        local end_line = vim.api.nvim_buf_line_count(bufnr)
+        -- Iterate through lines and find matches
+        for line = start_line, end_line - 1 do
+            local line_content = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1]
+            if line_content then
+                local start_col = 1
+                while true do
+                    -- Find the start and end positions of the match
+                    local s, e = line_content:find(search_pattern, start_col + 1)
+                    if not s then break end
+                    -- Add position to the list (row is 0-based, column is 0-based)
+                    table.insert(positions, { line, s - 1 })
+                    -- Add an extmark at the position
+                    vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, s - 1, {
+                        end_col = e,
+                        hl_group = "g0t4Illuminate", -- TODO to var
+                    })
+                    start_col = e                    -- Move past the current match
+                end
+            end
+        end
+        -- start_idx = start_idx - 1
+
+
+        vim.api.nvim_buf_set_extmark(current_buffer, ns_id, line_0based, start_idx, {
+            end_row = line_0based,
+            end_col = end_idx,
+            hl_group = "g0t4Illuminate",
+        })
+    end
 end
 
 function M.learn()
