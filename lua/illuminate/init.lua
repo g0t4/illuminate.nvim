@@ -6,20 +6,22 @@ function M.setup()
     local ns_id = vim.api.nvim_create_namespace("g0t4_illuminate")
 
     local function get_word_bounds(line, cursor_col)
-        -- TODO some issues with pattern and -=_ and others...
-        -- TODO also vet pattern vs above's ()
         -- %W == not %w ==> not alphanumeric chars
+        -- TODO? treat _ as word char?
+        -- find index of end of word after the cursor
         local start_index, end_index = line:find("%w+", cursor_col)
-        local before_cursor = line:sub(1, cursor_col)
-        local rev_start_idx, rev_end_idx = before_cursor:reverse():find("%w+")
+
+        -- find index BEFORE cursor
+        local text_before_cursor = line:sub(1, cursor_col)
+        local rev_start_idx, rev_end_idx = text_before_cursor:reverse():find("%w+")
         -- FYI shouldn't need start_idx b/c it s/b 1 always (always in a word, right?)
         -- what if I am on an = sign... currently underlines: "before = after"
         -- todo failure logic
         if rev_end_idx == nil then
-            rev_end_idx = before_cursor:len()
+            rev_end_idx = text_before_cursor:len()
         end
-        local word_start_idx = cursor_col - rev_end_idx
-        print(before_cursor, " - ", start_index, end_index, " - ", rev_start_idx, rev_end_idx, " - ", word_start_idx)
+        local word_start_idx = cursor_col - rev_end_idx + 1 -- matched char is not word char so +1 to not include it
+        print(text_before_cursor, " - ", start_index, end_index, " - ", rev_start_idx, rev_end_idx, " - ", word_start_idx)
         if start_index and end_index then
             -- SUPER CRAPPY so far... only works for success case
             return word_start_idx, end_index
@@ -48,26 +50,19 @@ function M.setup()
 
         -- FYI I REALLY ONLY GOT HAPPY PATH WORKING TO HIGHLIGHT WORD UNDER CURSOR
         local cursor_pos = vim.api.nvim_win_get_cursor(current_buffer)
-        -- wow, frustrating... cursor_pos has row/line (1 based), column (0 based)
-        print(vim.inspect(cursor_pos))
-        local show_text = "" .. vim.inspect(cursor_pos)
         local line_0based = cursor_pos[1] - 1
         local col_0based = cursor_pos[2]
         local current_line_text = vim.api.nvim_get_current_line()
-        -- local start_idx, end_idx = current_line_text:find("%S+", col_0based + 1)
-        local start_idx, end_idx = get_word_bounds(current_line_text, col_0based + 1)
 
-
+        -- *** if not on a word, then no highlights
         local current_char = current_line_text:sub(col_0based + 1, col_0based + 1)
-        -- print("current_char: ", current_char)
         if current_char:find("%W") then
-            -- if not on a word character, then nothing to highlight
-            print("not a word: ", current_char)
             return
         end
 
-
-        if not start_idx then
+        local start_idx, end_idx = get_word_bounds(current_line_text, col_0based + 1)
+        if not end_idx then
+            -- should this ever happen? (maybe if line has all non-word chars at end?)
             print("not implemented")
             -- start_idx, end_idx = line:find("[%w_]+", col + 1
             return
