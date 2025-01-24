@@ -13,7 +13,7 @@ function M.setup()
         local before_cursor = line:sub(1, cursor_col)
         local rev_start_idx, rev_end_idx = before_cursor:reverse():find("%w+")
         -- FYI shouldn't need start_idx b/c it s/b 1 always (always in a word, right?)
-        -- what if I am on an = sign... currently underlines: "before = after" 
+        -- what if I am on an = sign... currently underlines: "before = after"
         -- todo failure logic
         if rev_end_idx == nil then
             rev_end_idx = before_cursor:len()
@@ -41,8 +41,12 @@ function M.setup()
         if vim.bo.filetype == "TelescopePrompt" then
             return
         end
-        -- FYI I REALLY ONLY GOT HAPPY PATH WORKING TO HIGHLIGHT WORD UNDER CURSOR
+
         local current_buffer = 0
+        -- clear extmarks first:
+        vim.api.nvim_buf_clear_namespace(current_buffer, ns_id, 0, -1)
+
+        -- FYI I REALLY ONLY GOT HAPPY PATH WORKING TO HIGHLIGHT WORD UNDER CURSOR
         local cursor_pos = vim.api.nvim_win_get_cursor(current_buffer)
         -- wow, frustrating... cursor_pos has row/line (1 based), column (0 based)
         print(vim.inspect(cursor_pos))
@@ -53,6 +57,16 @@ function M.setup()
         -- local start_idx, end_idx = current_line_text:find("%S+", col_0based + 1)
         local start_idx, end_idx = get_word_bounds(current_line_text, col_0based + 1)
 
+
+        local current_char = current_line_text:sub(col_0based + 1, col_0based + 1)
+        -- print("current_char: ", current_char)
+        if current_char:find("%W") then
+            -- if not on a word character, then nothing to highlight
+            print("not a word: ", current_char)
+            return
+        end
+
+
         if not start_idx then
             print("not implemented")
             -- start_idx, end_idx = line:find("[%w_]+", col + 1
@@ -62,7 +76,6 @@ function M.setup()
         print("word: ", word)
         local search_pattern = word
 
-        vim.api.nvim_buf_clear_namespace(current_buffer, ns_id, 0, -1)
 
         local positions = {}                                  -- Store positions of matches
         local start_line = 0                                  -- TODO ONLY VISIBLE LINES
