@@ -4,16 +4,18 @@ function M.setup()
     vim.cmd("highlight g0t4Illuminate gui=underline")
 
     local ns_id = vim.api.nvim_create_namespace("g0t4_illuminate")
+    local hl_group = "g0t4Illuminate"
+    local word_chars = "[_%w]"
 
     local function get_word_bounds(line, cursor_col)
         -- %W == not %w ==> not alphanumeric chars
         -- TODO? treat _ as word char?
         -- find index of end of word after the cursor
-        local start_index, end_index = line:find("%w+", cursor_col)
+        local start_index, end_index = line:find(word_chars .. "+", cursor_col)
 
         -- find index BEFORE cursor
         local text_before_cursor = line:sub(1, cursor_col)
-        local rev_start_idx, rev_end_idx = text_before_cursor:reverse():find("%w+")
+        local rev_start_idx, rev_end_idx = text_before_cursor:reverse():find(word_chars .. "+")
         -- FYI shouldn't need start_idx b/c it s/b 1 always (always in a word, right?)
         -- what if I am on an = sign... currently underlines: "before = after"
         -- todo failure logic
@@ -21,19 +23,14 @@ function M.setup()
             rev_end_idx = text_before_cursor:len()
         end
         local word_start_idx = cursor_col - rev_end_idx + 1 -- matched char is not word char so +1 to not include it
-        print(text_before_cursor, " - ", start_index, end_index, " - ", rev_start_idx, rev_end_idx, " - ", word_start_idx)
+        -- print(text_before_cursor, " - ", start_index, end_index, " - ", rev_start_idx, rev_end_idx, " - ", word_start_idx)
         if start_index and end_index then
             -- SUPER CRAPPY so far... only works for success case
             return word_start_idx, end_index
         else
-            -- TODO error handling not working
-            -- Check if the cursor is inside a word and find backwards
-            local word_before = line:sub(1, cursor_col):match(".*()%w+$")
-            if word_before then
-                start_index = word_before
-                end_index = line:find("%W", start_index) or #line
-                return start_index, end_index
-            end
+            print(
+                "unexpected - b/c get_word_bounds - cursor_col is only on a word char so there should never be a failure to find both ways")
+            -- FYI get_word_bounds is never called on a non-word char (as cursor col)... so I shouldn't ever have this branch hit
         end
         return nil, nil -- No word found
     end
@@ -56,21 +53,21 @@ function M.setup()
 
         -- *** if not on a word, then no highlights
         local current_char = current_line_text:sub(col_0based + 1, col_0based + 1)
-        if current_char:find("%W") then
+        if not current_char:find(word_chars) then
             return
         end
 
         local start_idx, end_idx = get_word_bounds(current_line_text, col_0based + 1)
         if not end_idx then
-            -- should this ever happen? (maybe if line has all non-word chars at end?)
-            print("not implemented")
-            -- start_idx, end_idx = line:find("[%w_]+", col + 1
+            -- IIUC this can't happen b/c it would just be start_idx = end_idx (if all non-whitespace after cursor on the line, otherwise if there is more to the word it will be found (or even if end of line)
+            print(
+                "shouldn't happen - find failed to find non-word char from cursor position onward (shouldn't fail b/c cursor is a word char")
+            -- could happen if I change pattern and don't get that updated everywhere consistenlty, i.e. too add _ as word char
             return
         end
-        local word = current_line_text:sub(start_idx, end_idx)
-        print("word: ", word)
-        local search_pattern = word
 
+        -- search rest of buffer for the same word
+        local search_pattern = current_line_text:sub(start_idx, end_idx)
 
         local positions = {}                                  -- Store positions of matches
         local start_line = 0                                  -- TODO ONLY VISIBLE LINES
@@ -82,27 +79,25 @@ function M.setup()
             if line_content then
                 local start_col = 1
                 while true do
-                    -- Find the start and end positions of the match
-                    local s, e = line_content:find(search_pattern, start_col + 1)
+                    -- Find the start and end positions of the exact match (4th arg => false == exact, true = pattern)
+                    local s, e = line_content:find(search_pattern, start_col + 1, false)
                     if not s then break end
                     -- Add position to the list (row is 0-based, column is 0-based)
                     table.insert(positions, { line, s - 1 })
                     -- Add an extmark at the position
                     vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, s - 1, {
                         end_col = e,
-                        hl_group = "g0t4Illuminate", -- TODO to var
+                        hl_group = hl_group,
                     })
-                    start_col = e                    -- Move past the current match
+                    start_col = e -- Move past the current match
                 end
             end
         end
-        -- start_idx = start_idx - 1
-
 
         vim.api.nvim_buf_set_extmark(current_buffer, ns_id, line_0based, start_idx, {
             end_row = line_0based,
             end_col = end_idx,
-            hl_group = "g0t4Illuminate",
+            hl_group = hl_group,
         })
     end
 end
@@ -131,7 +126,7 @@ function M.learn()
         local current_buffer = 0
         local cursor_pos = vim.api.nvim_win_get_cursor(current_buffer)
         -- wow, frustrating... cursor_pos has row/line (1 based), column (0 based)
-        print(vim.inspect(cursor_pos))
+        -- print(vim.inspect(cursor_pos))
         local show_text = "" .. vim.inspect(cursor_pos)
         local line_0based = cursor_pos[1] - 1
         local col_0based = cursor_pos[2]
